@@ -923,13 +923,28 @@ function renderRegionalTabs(){
   }));
 }
 
+function statusCountsForCurrentFilter(){
+  const counts = {ok:0, pendente:0, atencao:0, critico:0};
+  allClients().forEach(c=>{
+    if(state.regional!=='todas' && c.regional!==state.regional) return;
+    if(state.query){
+      const q = norm(state.query);
+      const hay = norm([c.cliente,c.gerencia,c.alarme,c.contato,c.obs].join(' '));
+      if(!hay.includes(q)) return;
+    }
+    counts[c.statusBucket] = (counts[c.statusBucket]||0) + 1;
+  });
+  return counts;
+}
+
 function renderStatusChips(){
   const el = document.getElementById('statusChips');
   if(state.section!=='clientes'){ el.innerHTML=''; el.hidden=true; return; }
   el.hidden = false;
+  const counts = statusCountsForCurrentFilter();
   el.innerHTML = STATUS_ORDER.map(b=>{
     const on = state.status.has(b);
-    const count = DATA.totais[b];
+    const count = counts[b];
     return `<span class="chip ${on?'':'off'}" data-b="${b}" data-status="${b}"><span class="dot"></span>${STATUS_META[b].short} <b>${fmtInt(count)}</b></span>`;
   }).join('');
   el.querySelectorAll('.chip').forEach(chip=>chip.addEventListener('click', ()=>{
