@@ -114,9 +114,11 @@
   .kpis{
     display:grid; grid-template-columns:repeat(7,1fr); gap:1px;
     background:var(--line); border:1px solid var(--line); border-radius:10px;
-    overflow:hidden; margin-bottom:20px;
+    margin-bottom:20px;
   }
   .kpi{background:var(--panel); padding:14px 16px; min-width:0;}
+  .kpi:first-child{border-radius:9px 0 0 9px;}
+  .kpi:last-child{border-radius:0 9px 9px 0;}
   .kpi b{
     display:block; font-family:var(--font-mono); font-size:23px; font-weight:600;
     font-variant-numeric:tabular-nums; color:var(--ink); line-height:1.1;
@@ -131,6 +133,35 @@
   .kpi.k-pendente b{color:var(--neutral);}
   @media (max-width:1180px){ .kpis{grid-template-columns:repeat(4,1fr);} }
   @media (max-width:700px){ .kpis{grid-template-columns:repeat(2,1fr);} }
+  .kpi{position:relative; transition:background .15s;}
+  .kpi.k-clickable{cursor:pointer;}
+  .kpi.k-clickable:hover{background:var(--panel-2);}
+  .kpi-goto{
+    position:absolute; top:12px; right:14px; font-family:var(--font-mono); font-size:10px;
+    color:var(--muted-2); opacity:0; transition:opacity .15s, color .15s;
+  }
+  .kpi.k-clickable:hover .kpi-goto{opacity:1; color:var(--accent);}
+  .kpi-tip{
+    position:absolute; top:calc(100% + 6px); left:0; z-index:60;
+    min-width:230px; max-width:320px; max-height:270px; overflow-y:auto;
+    background:var(--panel-2); border:1px solid var(--line); border-radius:9px;
+    padding:10px 12px; box-shadow:0 16px 40px rgba(0,0,0,.5);
+    opacity:0; pointer-events:none; transform:translateY(-4px);
+    transition:opacity .12s ease, transform .12s ease;
+  }
+  .kpi.k-hoverable:hover .kpi-tip{opacity:1; pointer-events:auto; transform:translateY(0);}
+  .kpis .kpi:nth-child(4) .kpi-tip, .kpis .kpi:nth-child(5) .kpi-tip{left:auto; right:0;}
+  .kpi-tip-title{
+    font-family:var(--font-mono); font-size:9.5px; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--muted-2); margin-bottom:7px; padding-bottom:6px; border-bottom:1px solid var(--line);
+    display:flex; justify-content:space-between; gap:8px;
+  }
+  .kpi-tip-list{display:flex; flex-direction:column; gap:5px;}
+  .kpi-tip-item{font-size:12px; color:var(--ink); line-height:1.4; word-break:break-word;}
+  .kpi-tip-item b{font-family:var(--font-mono); font-weight:500; font-size:10px; color:var(--muted-2); margin-right:5px;}
+  .kpi-tip-empty{font-size:12px; color:var(--muted-2);}
+  @media (max-width:1180px){ .kpis .kpi:nth-child(5) .kpi-tip{left:0; right:auto;} }
+  @media (max-width:700px){ .kpis .kpi:nth-child(4) .kpi-tip{left:auto; right:0;} .kpis .kpi:nth-child(5) .kpi-tip{left:0; right:auto;} }
 
   /* ============ CONTROLS ============ */
   .controls{
@@ -257,8 +288,13 @@
   .bot-masked{font-family:var(--font-mono); font-size:10.5px; color:var(--muted-2); display:flex; align-items:center; gap:5px;}
 
   /* ============ VISÃO GERAL ============ */
-  .visao-grid{display:grid; grid-template-columns:340px 1fr; gap:18px;}
-  @media (max-width:1000px){ .visao-grid{grid-template-columns:1fr;} }
+  .visao-grid{display:grid; grid-template-columns:1fr; gap:18px;}
+  .therm-wide{display:flex; align-items:center; gap:40px; flex-wrap:wrap;}
+  .therm-wide .therm-main{display:flex; flex-direction:column; align-items:center; gap:10px; flex:none;}
+  .therm-wide .therm-side{flex:1; min-width:300px;}
+  .therm-wide .therm-mini-row{max-width:520px;}
+  .therm-wide .therm-legend{justify-content:flex-start;}
+  @media (max-width:700px){ .therm-wide{justify-content:center;} .therm-wide .therm-side{min-width:0; width:100%;} }
   .visao-card{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:18px 20px;}
   .visao-card h3{margin:0 0 4px; font-size:14px;}
   .visao-note{font-size:11.5px; color:var(--muted); margin:0 0 16px; line-height:1.5;}
@@ -633,20 +669,46 @@ function renderSidebarCounts(){
 }
 
 // ---------- KPI strip ----------
+function kpiTipList(clients){
+  if(!clients.length) return `<div class="kpi-tip-empty">Nenhum cliente</div>`;
+  return `<div class="kpi-tip-list">${clients.map(c=>`<div class="kpi-tip-item"><b>R${c.regional}</b>${esc(c.cliente)}</div>`).join('')}</div>`;
+}
+
+function goToSection(sec){
+  state.section = sec;
+  state.openClient=null; state.openCatKey=null; state.openTeamKey=null; state.query='';
+  document.getElementById('searchInput').value='';
+  renderAll();
+}
+
 function renderKPIs(){
   const t = DATA.totais;
+  const all = allClients();
+  const byBucket = (b)=> all.filter(c=>c.statusBucket===b).sort((a,b)=>a.cliente.localeCompare(b.cliente,'pt-BR'));
   const items = [
     {k:'clientes', v:t.clientes, label:'Clientes'},
-    {k:'ok', v:t.ok, label:'OK', cls:'k-ok'},
-    {k:'pendente', v:t.pendente, label:'Sem registro', cls:'k-pendente'},
-    {k:'atencao', v:t.atencao, label:'Atenção', cls:'k-atencao'},
-    {k:'critico', v:t.critico, label:'Sem monitoramento', cls:'k-critico'},
-    {k:'alarmes', v:t.alarmesNMS, label:'Alarmes NMS'},
-    {k:'canais', v:t.canaisTeams, label:'Canais Teams'},
+    {k:'ok', v:t.ok, label:'OK', cls:'k-ok', tipTitle:'Clientes OK', clients:byBucket('ok')},
+    {k:'pendente', v:t.pendente, label:'Sem registro', cls:'k-pendente', tipTitle:'Sem registro', clients:byBucket('pendente')},
+    {k:'atencao', v:t.atencao, label:'Atenção', cls:'k-atencao', tipTitle:'Atenção', clients:byBucket('atencao')},
+    {k:'critico', v:t.critico, label:'Sem monitoramento', cls:'k-critico', tipTitle:'Sem monitoramento', clients:byBucket('critico')},
+    {k:'alarmes', v:t.alarmesNMS, label:'Alarmes NMS', nav:'catalogo'},
+    {k:'canais', v:t.canaisTeams, label:'Canais Teams', nav:'equipes'},
   ];
-  document.getElementById('kpiStrip').innerHTML = items.map(i=>`
-    <div class="kpi ${i.cls||''}"><b>${fmtInt(i.v)}</b><span>${i.label}</span></div>
-  `).join('');
+  document.getElementById('kpiStrip').innerHTML = items.map(i=>{
+    const hoverable = !!i.clients;
+    const clickable = !!i.nav;
+    const cls = [i.cls||'', hoverable?'k-hoverable':'', clickable?'k-clickable':''].filter(Boolean).join(' ');
+    const tip = hoverable ? `
+      <div class="kpi-tip">
+        <div class="kpi-tip-title"><span>${esc(i.tipTitle)}</span><span>${fmtInt(i.clients.length)}</span></div>
+        ${kpiTipList(i.clients)}
+      </div>` : '';
+    const goto = clickable ? `<span class="kpi-goto">Ver &#8594;</span>` : '';
+    return `<div class="kpi ${cls}" ${clickable?`data-nav="${i.nav}"`:''}><b>${fmtInt(i.v)}</b><span>${i.label}</span>${goto}${tip}</div>`;
+  }).join('');
+  document.querySelectorAll('#kpiStrip .kpi.k-clickable').forEach(el=>{
+    el.addEventListener('click', ()=>goToSection(el.dataset.nav));
+  });
 }
 
 // ---------- controls ----------
@@ -847,14 +909,6 @@ function healthBand(score){
   if(score >= 50) return {label:'Atenção',  color:'var(--warn)', hex:'#f0b93d'};
   return {label:'Crítico', color:'var(--bad)', hex:'#f0475d'};
 }
-// posições esquemáticas (não geográficas) das 4 regionais, mantendo a disposição relativa do mapa do Brasil
-const REGION_POS = {
-  '1': {left:'2%',  top:'0%',  width:'42%', height:'34%'},
-  '2': {left:'46%', top:'4%',  width:'52%', height:'38%'},
-  '3': {left:'48%', top:'46%', width:'42%', height:'30%'},
-  '4': {left:'20%', top:'78%', width:'44%', height:'22%'},
-};
-
 function regionRows(){
   return ['1','2','3','4'].map(n=>{
     const r = DATA.regionais[n];
@@ -883,39 +937,25 @@ function renderVisao(){
   }).join('');
 
   const thermHtml = `
-    <div class="visao-card">
+    <div class="visao-card visao-full">
       <h3>Termômetro de saúde operacional</h3>
-      <p class="visao-note">Índice único (0–100) calculado a partir da mistura de status de todos os clientes.</p>
-      <div class="therm-block">
-        <div class="therm-tube"><div class="fill" style="height:${overall}%; background:linear-gradient(180deg, ${band.hex}, ${band.hex}aa)"></div></div>
-        <div class="therm-score">${overall}<span class="of">/100</span></div>
-        <div class="therm-band" style="color:${band.color}; background:color-mix(in srgb, ${band.hex} 16%, transparent); border:1px solid ${band.hex}">${band.label}</div>
-        <div class="therm-mini-row">${miniTherms}</div>
-        <div class="therm-legend">
-          <span class="li"><span class="dot" style="background:var(--good)"></span>OK ${fmtInt(t.ok)}</span>
-          <span class="li"><span class="dot" style="background:var(--neutral)"></span>Pendente ${fmtInt(t.pendente)}</span>
-          <span class="li"><span class="dot" style="background:var(--warn)"></span>Atenção ${fmtInt(t.atencao)}</span>
-          <span class="li"><span class="dot" style="background:var(--bad)"></span>Crítico ${fmtInt(t.critico)}</span>
+      <p class="visao-note">Índice único (0–100) calculado a partir da mistura de status de todos os clientes, com comparação lado a lado por regional.</p>
+      <div class="therm-wide">
+        <div class="therm-main">
+          <div class="therm-tube"><div class="fill" style="height:${overall}%; background:linear-gradient(180deg, ${band.hex}, ${band.hex}aa)"></div></div>
+          <div class="therm-score">${overall}<span class="of">/100</span></div>
+          <div class="therm-band" style="color:${band.color}; background:color-mix(in srgb, ${band.hex} 16%, transparent); border:1px solid ${band.hex}">${band.label}</div>
+        </div>
+        <div class="therm-side">
+          <div class="therm-mini-row">${miniTherms}</div>
+          <div class="therm-legend">
+            <span class="li"><span class="dot" style="background:var(--good)"></span>OK ${fmtInt(t.ok)}</span>
+            <span class="li"><span class="dot" style="background:var(--neutral)"></span>Pendente ${fmtInt(t.pendente)}</span>
+            <span class="li"><span class="dot" style="background:var(--warn)"></span>Atenção ${fmtInt(t.atencao)}</span>
+            <span class="li"><span class="dot" style="background:var(--bad)"></span>Crítico ${fmtInt(t.critico)}</span>
+          </div>
         </div>
       </div>
-    </div>`;
-
-  const blobs = regions.map(r=>{
-    const b = healthBand(r.score);
-    const pos = REGION_POS[r.n];
-    return `<div class="region-blob" style="left:${pos.left}; top:${pos.top}; width:${pos.width}; height:${pos.height}; border-left:3px solid ${b.hex};" title="Regional ${r.n}: ${r.total} clientes · ${r.ok} OK · ${r.pendente} pendente · ${r.atencao} atenção · ${r.critico} crítico · índice ${r.score}/100">
-      <div class="rname">Regional ${r.n}</div>
-      <div class="rcount">${fmtInt(r.total)}</div>
-      <div class="rsub">clientes</div>
-    </div>`;
-  }).join('');
-
-  const mapHtml = `
-    <div class="visao-card">
-      <h3>Mapa do Brasil por regional</h3>
-      <p class="visao-note">Posição esquemática das 4 regionais (não é um recorte geográfico exato) — a cor da borda mostra o índice de saúde. Passe o mouse para detalhes.</p>
-      <div class="brmap">${blobs}</div>
-      <div class="map-caption">verde ≥ 70 · amarelo 50–69 · vermelho &lt; 50</div>
     </div>`;
 
   const statusKeys = ['ok','pendente','atencao','critico'];
@@ -941,7 +981,7 @@ function renderVisao(){
       <div class="heat-wrap"><table class="heat"><thead>${thead}</thead><tbody>${rows}${totalsRow}</tbody></table></div>
     </div>`;
 
-  wrap.innerHTML = `<div class="visao-grid">${thermHtml}${mapHtml}${heatHtml}</div>`;
+  wrap.innerHTML = `<div class="visao-grid">${thermHtml}${heatHtml}</div>`;
 }
 
 // ---------- referencia ----------
