@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tarefas monitoramento ALDAK — Monitoramento &amp; Equipes</title>
+<title>Tarefas ALDAK — Monitoramento &amp; Equipes</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Public+Sans:wght@400;500;600;700;800&display=swap');
 
@@ -856,7 +856,10 @@ tick(); setInterval(tick, 1000);
 // LOGIN COM MICROSOFT (MSAL) + LEITURA AO VIVO DA PLANILHA VIA GRAPH API
 // ============================================================================
 const CONFIG_KEYS = { clientId: 'aldak_msal_client_id', shareUrl: 'aldak_sharepoint_url' };
-const DEFAULT_SHARE_URL = "https://aldaktecnologia-my.sharepoint.com/:x:/r/personal/gabriel_carvalho_aldaktecnologia_com_br/_layouts/15/Doc.aspx?sourcedoc=%7BED74F4BA-4170-4777-91B6-0EAE7C94355C%7D&file=Base_ALDAK_Monitoramento_Equipes_1.xlsx&action=default&mobileredirect=true";
+const DEFAULT_SHARE_URL = "https://aldaktecnologia-my.sharepoint.com/personal/gabriel_carvalho_aldaktecnologia_com_br/Documents/Base_ALDAK_Monitoramento_oficial_CORRIGIDA.xlsx";
+const DEFAULT_CLIENT_ID = "70c9eeca-4938-44e0-8cbf-499e00e1a8fe";
+const DEFAULT_DRIVE_ID = "b!75XpCe5sHEa3u2q02r26t1ExsWOAqjlAvhkX7Yw0Pasexs0_dZJ9QLcwjFLCGpk1";
+const DEFAULT_ITEM_ID = "01LGB43QKBN72JEWIXRJA3GBEQSD35HMWK";
 const AUTHORITY = "https://login.microsoftonline.com/aldaktecnologia.com.br";
 const GRAPH_SCOPES = ["Files.Read"];
 const SHEETS_REGIONAL = [1,2,3,4].map(n=>`REGIONAL ${n}`);
@@ -871,10 +874,10 @@ let lastSyncAt = null;
 function getConfig(){
   try{
     return {
-      clientId: localStorage.getItem(CONFIG_KEYS.clientId) || '',
+      clientId: localStorage.getItem(CONFIG_KEYS.clientId) || DEFAULT_CLIENT_ID,
       shareUrl: localStorage.getItem(CONFIG_KEYS.shareUrl) || DEFAULT_SHARE_URL,
     };
-  }catch(e){ return {clientId:'', shareUrl: DEFAULT_SHARE_URL}; }
+  }catch(e){ return {clientId: DEFAULT_CLIENT_ID, shareUrl: DEFAULT_SHARE_URL}; }
 }
 function saveConfig(clientId, shareUrl){
   try{
@@ -1110,7 +1113,11 @@ async function runSync(){
     const cfg = getConfig();
     const token = await getAccessToken();
     if(!currentDriveItem){
-      currentDriveItem = await resolveDriveItem(token, cfg.shareUrl);
+      if(cfg.shareUrl === DEFAULT_SHARE_URL && DEFAULT_DRIVE_ID && DEFAULT_ITEM_ID){
+        currentDriveItem = { driveId: DEFAULT_DRIVE_ID, itemId: DEFAULT_ITEM_ID };
+      } else {
+        currentDriveItem = await resolveDriveItem(token, cfg.shareUrl);
+      }
     }
     showGateState('loading', {message:'Lendo as abas da planilha...'});
     const data = await loadAllData(token, currentDriveItem.driveId, currentDriveItem.itemId);
